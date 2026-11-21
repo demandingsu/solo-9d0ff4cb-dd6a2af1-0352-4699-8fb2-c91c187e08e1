@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}试算结果 · 拒收规则试算平台{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>试算结果（任务号 {{ job.job_id }}）</h2>
+  <div class="summary">
+    <div class="pill">可单独触发<b class="ok-text">{{ solo }}</b></div>
+    <div class="pill">只能连带触发<b style="color:var(--amber)">{{ joint }}</b></div>
+    <div class="pill">范围内从不触发<b class="bad-text">{{ never }}</b></div>
+    <div class="pill">规则总数<b>{{ job.results|length }}</b></div>
+  </div>
+
+  <div class="file-row">
+    <a class="btn" href="{{ url_for('download_csv', job_id=job.job_id) }}">下载称重 CSV</a>
+    <a class="btn secondary" href="{{ url_for('replay', job_id=job.job_id) }}">前往回放核对</a>
+    <a class="btn secondary" href="{{ url_for('index') }}">返回修改规则</a>
+  </div>
+  <p class="hint">
+    CSV 含 <code>row_id, gross_g, tare_g, declared_net_g, expected_rule_ids, fired_rule_ids</code> 六列（UTF-8 带 BOM，可直接用 Excel 打开）。
+    “从不触发”的规则没有数据行；“连带触发”的行会在 <code>fired_rule_ids</code> 中列出全部实际触发编号。
+  </p>
+</div>
+
+<div class="card">
+  <h2>逐规则结论与试算数据</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:80px">规则编号</th>
+        <th>规则内容（各比较同时成立）</th>
+        <th style="width:120px">结论</th>
+        <th class="num" style="width:110px">毛重(g)</th>
+        <th class="num" style="width:110px">托盘重(g)</th>
+        <th class="num" style="width:120px">申报净重(g)</th>
+        <th style="width:200px">该行实际触发规则</th>
+        <th>说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in job.results %}
+      <tr>
+        <td class="mono"><b>{{ r.rule.rule_id }}</b></td>
+        <td class="mono" style="font-size:12.5px">{{ r.rule.to_text() }}</td>
+        <td><span class="badge badge-{{ r.status }}">{{ status_labels[r.status] }}</span></td>
+        {% if r.row %}
+        <td class="num mono">{{ r.row.gross }}</td>
+        <td class="num mono">{{ r.row.tare }}</td>
+        <td class="num mono">{{ r.row.declared }}</td>
+        <td class="mono">{{ r.fired_ids | join('、') }}</td>
+        {% else %}
+        <td colspan="3" class="muted">— 无可行数据 —</td>
+        <td class="muted">—</td>
+        {% endif %}
+        <td style="font-size:12.5px">
+          {% if r.status == 'solo' %}该行仅触发本规则，可直接用于入仓回归。
+          {% elif r.status == 'joint' %}{{ r.reason }}；连带编号：{{ r.extra_ids | join('、') }}
+          {% else %}{{ r.reason }}。{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>本次取值范围</h2>
+  <table style="width:auto">
+    <thead><tr><th>列</th><th class="num">下限(g)</th><th class="num">上限(g)</th></tr></thead>
+    <tbody>
+    {% for f in ['gross','tare','declared'] %}
+      <tr><td>{{ field_labels[f] }}</td><td class="num mono">{{ job.bounds[f][0] }}</td><td class="num mono">{{ job.bounds[f][1] }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

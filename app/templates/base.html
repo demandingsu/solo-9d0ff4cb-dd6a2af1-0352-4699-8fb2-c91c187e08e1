@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}称重拒收规则试算平台{% endblock %}</title>
+  <style>
+    :root { --blue:#1d4ed8; --bg:#f6f8fb; --line:#d7deea; --red:#b91c1c; --green:#15803d; --amber:#b45309; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif; background:var(--bg); color:#1f2937; }
+    header { background:#0f2b5c; color:#fff; padding:14px 28px; display:flex; align-items:center; gap:20px; }
+    header h1 { font-size:18px; margin:0; font-weight:600; }
+    header nav a { color:#cdd9f5; text-decoration:none; margin-right:16px; font-size:14px; }
+    header nav a:hover { color:#fff; }
+    main { max-width:1180px; margin:24px auto; padding:0 20px; }
+    .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:22px 24px; margin-bottom:20px; }
+    h2 { font-size:16px; margin:0 0 14px; }
+    h3 { font-size:14px; margin:18px 0 8px; }
+    textarea { width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; padding:10px; border:1px solid var(--line); border-radius:8px; line-height:1.6; }
+    input[type=number], input[type=text] { padding:7px 9px; border:1px solid var(--line); border-radius:7px; font-size:14px; width:130px; }
+    .bounds { display:flex; gap:26px; flex-wrap:wrap; margin:6px 0 4px; }
+    .bounds .field-group { border:1px solid var(--line); border-radius:8px; padding:12px 16px; background:#fafbfe; }
+    .bounds .field-group label { display:block; font-weight:600; margin-bottom:8px; }
+    .bounds .range-inputs { display:flex; align-items:center; gap:6px; }
+    button, .btn { background:var(--blue); color:#fff; border:0; border-radius:8px; padding:10px 22px; font-size:14px; cursor:pointer; text-decoration:none; display:inline-block; }
+    button:hover, .btn:hover { background:#1e40af; }
+    .btn.secondary { background:#475569; }
+    .btn.secondary:hover { background:#334155; }
+    .hint { color:#64748b; font-size:12.5px; line-height:1.7; }
+    code { background:#eef2f8; padding:1px 5px; border-radius:4px; font-size:12.5px; }
+    table { border-collapse:collapse; width:100%; font-size:13px; }
+    th, td { border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; }
+    th { background:#f1f5fb; font-weight:600; }
+    .num { text-align:right; font-variant-numeric:tabular-nums; }
+    .badge { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap; }
+    .badge-solo { background:#dcfce7; color:var(--green); }
+    .badge-joint { background:#fef3c7; color:var(--amber); }
+    .badge-never { background:#fee2e2; color:var(--red); }
+    .summary { display:flex; gap:14px; margin-bottom:16px; flex-wrap:wrap; }
+    .summary .pill { border:1px solid var(--line); border-radius:10px; padding:10px 18px; background:#fafbfe; font-size:13px; }
+    .summary .pill b { font-size:20px; display:block; }
+    .alert { border-radius:8px; padding:14px 18px; margin-bottom:18px; font-size:14px; line-height:1.6; }
+    .alert.error { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+    .alert.warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+    .alert.ok { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
+    .muted { color:#64748b; }
+    .mono { font-family:ui-monospace,Menlo,Consolas,monospace; }
+    .file-row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:10px 0; }
+    input[type=file] { font-size:13px; }
+    .ok-text { color:var(--green); font-weight:600; }
+    .bad-text { color:var(--red); font-weight:600; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>预制构件称重 · 拒收规则试算平台</h1>
+  <nav>
+    <a href="{{ url_for('index') }}">规则录入与试算</a>
+    <a href="{{ url_for('replay') }}">CSV 回放核对</a>
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

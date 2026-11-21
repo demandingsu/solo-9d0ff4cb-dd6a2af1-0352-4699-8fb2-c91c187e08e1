@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}出错了 · 拒收规则试算平台{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>无法完成操作</h2>
+  <div class="alert error">{{ message }}</div>
+  <a class="btn secondary" href="{{ url_for('index') }}">返回规则录入页</a>
+</div>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>1. 填写各列整数取值范围（单位：克，闭区间）</h2>
+  <form method="post" action="{{ url_for('solve') }}">
+    <div class="bounds">
+      {% set fields = [('gross','毛重'), ('tare','托盘重'), ('declared','申报净重')] %}
+      {% for key, label in fields %}
+      <div class="field-group">
+        <label>{{ label }}</label>
+        <div class="range-inputs">
+          <input type="number" name="{{ key }}_low" min="0" max="{{ max_value }}" value="0" required>
+          <span>～</span>
+          <input type="number" name="{{ key }}_high" min="0" max="{{ max_value }}" value="{{ max_value }}" required>
+          <span class="muted">克</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="hint">每列只允许 0 ～ {{ "{:,}".format(max_value) }} 之间的整数；求解出的称重数据都会落在该范围内。</p>
+
+    <h2 style="margin-top:22px;">2. 录入带编号的拒收规则</h2>
+    <textarea name="rules_text" rows="12" spellcheck="false">{{ default_rules }}</textarea>
+    <p class="hint">
+      每行一条规则，格式 <code>编号 | 比较式1；比较式2…</code>，同一规则内的比较必须<b>同时成立</b>（AND）。<br>
+      比较两边可写字段名（毛重 / 托盘重 / 申报净重，也支持 G / T / D）、非负整数，以及它们的加减式，例如
+      <code>毛重 - 托盘重 - 申报净重 &gt; 500</code>、<code>毛重 &lt; 托盘重 + 100</code>。<br>
+      比较符：<code>= == != &lt;&gt; &gt; &gt;= &lt; &lt;=</code>；条件之间可用 <code>； ; , 且 and</code> 分隔；以 <code>#</code> 开头的行会被忽略。
+    </p>
+    <button type="submit">开始试算</button>
+  </form>
+</div>
+{% endblock %}

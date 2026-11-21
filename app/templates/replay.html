@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}CSV 回放核对 · 拒收规则试算平台{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>回放称重 CSV，核对实际触发的规则编号</h2>
+  <form method="post" enctype="multipart/form-data">
+    <h3>拒收规则（与生成 CSV 时保持一致）</h3>
+    <textarea name="rules_text" rows="10" spellcheck="false">{{ rules_text }}</textarea>
+    <h3>称重 CSV 文件</h3>
+    <div class="file-row">
+      <input type="file" name="csv_file" accept=".csv,text/csv" required>
+      <button type="submit">上传并回放</button>
+    </div>
+    <p class="hint">
+      回放只依赖前三列称重数据（表头支持 <code>gross_g/tare_g/declared_net_g</code> 或中文列名），
+      系统会按规则重新计算触发编号；若文件含 <code>expected_rule_ids</code> 列，还会自动比对预期与实际是否一致。
+      支持 UTF-8（含 BOM）与 GBK 编码。
+    </p>
+  </form>
+</div>
+
+{% if error %}
+<div class="alert error">{{ error }}</div>
+{% endif %}
+
+{% if report %}
+<div class="card">
+  <h2>回放结果</h2>
+  {% if report.errors %}
+  <div class="alert warn">
+    <b>文件中有 {{ report.errors|length }} 处问题：</b><br>
+    {% for e in report.errors %}· {{ e }}<br>{% endfor %}
+  </div>
+  {% endif %}
+  {% if report.rows %}
+  <div class="summary">
+    <div class="pill">有效数据行<b>{{ report.rows|length }}</b></div>
+    <div class="pill">与预期一致<b class="ok-text">{{ report.matched_count }}</b></div>
+    <div class="pill">与预期不一致<b class="bad-text">{{ report.mismatch_count }}</b></div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>行编号</th>
+        <th class="num">毛重(g)</th>
+        <th class="num">托盘重(g)</th>
+        <th class="num">申报净重(g)</th>
+        <th>实际触发规则编号</th>
+        <th>CSV 中预期编号</th>
+        <th style="width:110px">核对</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in report.rows %}
+      <tr>
+        <td class="mono">{{ row.row_id }}</td>
+        <td class="num mono">{{ row.values.gross }}</td>
+        <td class="num mono">{{ row.values.tare }}</td>
+        <td class="num mono">{{ row.values.declared }}</td>
+        <td class="mono">{% if row.fired_ids %}{{ row.fired_ids|join('、') }}{% else %}<span class="muted">无规则触发</span>{% endif %}</td>
+        <td class="mono">{% if row.expected_ids %}{{ row.expected_ids|join('、') }}{% else %}<span class="muted">未提供</span>{% endif %}</td>
+        <td>
+          {% if row.match is none %}<span class="muted">—</span>
+          {% elif row.match %}<span class="ok-text">✓ 一致</span>
+          {% else %}<span class="bad-text">✗ 不一致</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="alert error">没有可回放的有效数据行。</div>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
