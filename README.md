@@ -21,12 +21,22 @@
   UTF-8 带 BOM（Excel 友好），`row_id` 与目标规则编号一致，never 规则不产生行。
 - **CSV 回放**：上传 CSV（支持 UTF-8/BOM、GBK，表头支持中英文），按规则重新计算每行实际触发编号；
   含预期列时自动比对并标出一致/不一致，逐行展示供核对。
+- **主码迁移核对**：旧数仓称重明细只记首条命中的拒收码，规则顺序未留档。在网页录入规则，
+  上传历史（三列重量 + 记录号 + 主码，主码留空表示通过）和待迁移（三列重量 + 记录号）两份 CSV，
+  用“历史主码 = 该行首条命中”反推规则先后，判定待迁移行并下载：
+  - 历史主码未命中、空码却有命中、先后关系成环 → 指出造成冲突的历史记录，**暂停本批下载**；
+  - 无冲突时：待迁移行无命中记“通过”；所有相容顺序的首条命中一致才填主码（“主码确定”）；
+    其余标“待核”；
+  - 下载只收录“通过”和“主码确定”的行；
+  - 可在网页更正历史主码，重算后立即更新标记与下载；若更正引入冲突，保留更正与原因，
+    原下载地址也暂停（HTTP 409），直至冲突排除。
 
 ## 用 Docker Compose 启动
 
 ```bash
 docker compose up --build -d
 # 浏览器打开 http://localhost:8000
+# 主码迁移演示页：http://localhost:8000/migration
 docker compose logs -f
 docker compose down
 ```
@@ -40,9 +50,13 @@ docker compose down
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 flask --app app.main run --port 8000      # 开发服务器
-pytest                                     # 41 项测试
+pytest                                     # 68 项测试
 python scripts/demo_e2e.py                 # 端到端演示（solo/joint/never 全覆盖）
+python scripts/demo_migration.py           # 主码迁移：判定 / 成环 / 更正
+python scripts/demo_web_migration.py http://127.0.0.1:8000   # 服务启动后走真实 HTTP
 ```
+
+演示数据在 `examples/migration_*.{txt,csv}`：规则文本、历史（带主码）、待迁移（无主码）。
 
 ## 目录结构
 
@@ -51,10 +65,12 @@ app/
   rules.py     # 规则文本解析、线性表达式与纯 Python 规则引擎（回放复用）
   solver.py    # z3 求解：solo / joint（连带最小化）/ never 判定
   replay.py    # 称重 CSV 生成与回放核对
+  migration.py # 主码迁移：CSV 解析、先后关系推断、冲突检测、首条命中判定
   main.py      # Flask 路由与内存任务表
-  templates/   # 录入页、结果页、回放页、错误页
-tests/         # 解析器 / 求解器 / 回放 / Flask 端到端测试
-scripts/demo_e2e.py
+  templates/   # 录入页、结果页、回放页、迁移核对页、错误页
+tests/         # 解析器 / 求解器 / 回放 / 迁移 / Flask 端到端测试
+scripts/       # demo_e2e.py、demo_migration.py、demo_web_migration.py
+examples/      # 示例规则与迁移演示 CSV
 Dockerfile, docker-compose.yml, requirements.txt
 ```
 
@@ -64,3 +80,25 @@ Dockerfile, docker-compose.yml, requirements.txt
 2. 可满足时，在“触发目标规则”的约束下最小化**同时触发的其他规则条数**：
    最优值为 0 即 solo；否则为 joint，并返回该最优行及其连带规则编号。
 3. 回放只信任称重三列与规则文本，`fired_rule_ids` 由规则引擎重新计算，不采信文件内既有结论。
+
+## 主码迁移口径说明
+
+1. **先后关系**：历史行主码为 R，该行同时命中 R 与其他规则 S1…Sn，则 R 必须先于每条 Si
+   （旧系统只记首条命中）。所有历史行给出的“先于”合并成有向图。
+2. **冲突**（任一存在即暂停本批下载，并列出造成冲突的历史记录号）：
+   - 历史主码未命中：主码为空却实际有命中；主码非空却不在该行命中（含规则编号不存在）；
+   - 先后关系成环：有向图存在强连通分量（用 Tarjan 找环，列出席位内的边与来源记录）。
+3. **待迁移行判定**（仅在无冲突时进行）：
+   - 无任何命中 → **通过**，主码留空；
+   - 命中集合中，若去掉所有“有路径先于它”的规则后只剩一条候选 → **主码确定**，
+     该候选在所有相容顺序中都排首位；
+   - 否则 → **待核**（候选 ≥ 2，或先后关系互相矛盾），不填主码、不进下载。
+4. **下载**：仅“通过”和“主码确定”的行，列为
+   `record_no, gross_g, tare_g, declared_net_g, primary_code, status`，UTF-8 带 BOM。
+   存在冲突时下载地址返回 409；冲突排除后同一地址恢复下载。
+5. **更正**：网页按记录号更正历史主码（留空 = 通过），立即重算全部标记与下载内容；
+   每次更正的记录号、原值、新值、时间、重算后原因（以及是否引入冲突）都会保留展示。
+   若更正引入新冲突，下载保持暂停，直到冲突被改掉。
+
+演示数据：`examples/migration_rules.txt`、`examples/migration_history.csv`、
+`examples/migration_pending.csv`；也可直接用 `/migration` 页预填的默认内容。

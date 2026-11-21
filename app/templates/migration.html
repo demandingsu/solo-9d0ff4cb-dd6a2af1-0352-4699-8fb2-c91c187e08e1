@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}主码迁移核对 · 拒收规则试算平台{% endblock %}
+{% block content %}
+{% if not report %}
+<div class="card">
+  <h2>主码迁移核对：用历史主码反推规则先后</h2>
+  <form method="post" enctype="multipart/form-data">
+    <h3>拒收规则（顺序未知也没关系，系统会推断）</h3>
+    <textarea name="rules_text" rows="8" spellcheck="false" placeholder="每行一条：编号 | 比较式">{{ default_rules }}</textarea>
+    <p class="hint">
+      每行一条规则，格式 <code>编号 | 比较式1；比较式2…</code>。历史主码须与这里的规则编号一致。
+      {% if not demo_loaded %}<a href="{{ url_for('migration_index', demo=1) }}">填入一套演示数据</a>{% endif %}
+    </p>
+
+    <h3>历史称重 CSV（三列重量 + 记录号 + 历史主码）</h3>
+    <div class="file-row">
+      <input type="file" name="history_file" accept=".csv,text/csv">
+      <span class="muted">表头可用 <code>记录号,毛重,托盘重,申报净重,主码</code>；主码留空表示该行通过。</span>
+    </div>
+    <textarea name="history_text" rows="7" spellcheck="false" placeholder="未选择文件时，可直接粘贴 CSV 内容">{{ default_history }}</textarea>
+
+    <h3>待迁移称重 CSV（三列重量 + 记录号）</h3>
+    <div class="file-row">
+      <input type="file" name="pending_file" accept=".csv,text/csv">
+      <span class="muted">表头可用 <code>记录号,毛重,托盘重,申报净重</code>。</span>
+    </div>
+    <textarea name="pending_text" rows="5" spellcheck="false" placeholder="未选择文件时，可直接粘贴 CSV 内容">{{ default_pending }}</textarea>
+
+    <div class="file-row" style="margin-top:16px;">
+      <button type="submit">上传并核对</button>
+    </div>
+    <p class="hint">
+      旧明细只记首条命中的拒收码，规则顺序未留档。系统用“历史主码 = 该行首条命中”推断
+      主码规则先于该行其他所有命中规则；若主码未命中、空码却有命中、或先后关系成环，
+      会指出造成冲突的历史记录，并暂停本批下载。支持 UTF-8（含 BOM）与 GBK。
+    </p>
+  </form>
+</div>
+{% endif %}
+
+{% if error %}
+<div class="alert error">{{ error }}</div>
+{% endif %}
+
+{% if report %}
+{% if report.has_conflict %}
+<div class="alert error">
+  <b>存在 {{ report.conflicts|length }} 项冲突，本批已暂停下载。</b>
+  请按下表更正历史主码后重算；更正记录与原因会保留。
+  <table style="margin-top:10px; background:#fff;">
+    <thead>
+      <tr><th style="width:150px">冲突类型</th><th style="width:180px">造成冲突的历史记录</th><th>说明</th></tr>
+    </thead>
+    <tbody>
+      {% for c in report.conflicts %}
+      <tr>
+        <td><span class="badge badge-never">{{ c.label }}</span></td>
+        <td class="mono">{{ c.record_text }}</td>
+        <td style="font-size:12.5px">{{ c.detail }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert ok">
+  <b>未发现冲突。</b>可下载“通过”和“主码确定”的 {{ report.download_decisions|length }} 行；
+  待迁移共 {{ report.pending|length }} 行，其中待核 {{ report.counts()['review'] }} 行不进入下载。
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>本批概况（任务号 {{ job.job_id }}）</h2>
+  <p class="hint" style="margin-top:0;">
+    历史文件：<span class="mono">{{ job.history_filename }}</span>
+    ｜待迁移文件：<span class="mono">{{ job.pending_filename }}</span>
+  </p>
+  <div class="summary">
+    <div class="pill">历史记录<b>{{ report.history|length }}</b></div>
+    <div class="pill">推断出的先后边<b>{{ report.order_edges|length }}</b></div>
+    <div class="pill">通过<b class="ok-text">{{ report.counts()['pass'] }}</b></div>
+    <div class="pill">主码确定<b class="ok-text">{{ report.counts()['determined'] }}</b></div>
+    <div class="pill">待核<b style="color:var(--amber)">{{ report.counts()['review'] }}</b></div>
+  </div>
+  <div class="file-row">
+    {% if report.download_allowed %}
+    <a class="btn" href="{{ url_for('migration_download', job_id=job.job_id) }}">下载迁移结果 CSV</a>
+    {% else %}
+    <span class="btn" style="background:#9ca3af; cursor:not-allowed;" title="存在冲突，下载已暂停">下载已暂停（存在冲突）</span>
+    {% endif %}
+    <span class="muted">只收录“通过”和“主码确定”的行：记录号、三列重量、主码、结论。</span>
+    <a class="btn secondary" href="{{ url_for('migration_index') }}">重新上传一批</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2>推断出的先后关系</h2>
+  {% if report.order_edges %}
+  <table>
+    <thead><tr><th>先命中</th><th>后命中</th><th>据此推断的历史记录</th></tr></thead>
+    <tbody>
+      {% for src, dst, records in report.order_edges %}
+      <tr>
+        <td class="mono">{{ src }}</td>
+        <td class="mono">{{ dst }}</td>
+        <td class="mono">{{ records|join('、') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">历史记录没有提供可用的先后关系（每行最多只命中一条规则，或全部存在冲突）。</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>历史记录核对与主码更正</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:90px">记录号</th>
+        <th class="num">毛重(g)</th>
+        <th class="num">托盘重(g)</th>
+        <th class="num">申报净重(g)</th>
+        <th>全部命中规则</th>
+        <th style="width:90px">原主码</th>
+        <th>核对 / 冲突</th>
+        <th style="width:260px">更正主码（留空 = 通过）</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for h in report.history %}
+      <tr {% if h.has_conflict %}style="background:#fff7f7;"{% endif %}>
+        <td class="mono"><b>{{ h.row.record_no }}</b></td>
+        <td class="num mono">{{ h.row.values.gross }}</td>
+        <td class="num mono">{{ h.row.values.tare }}</td>
+        <td class="num mono">{{ h.row.values.declared }}</td>
+        <td class="mono">{% if h.fired_ids %}{{ h.fired_ids|join('、') }}{% else %}<span class="muted">无命中</span>{% endif %}</td>
+        <td class="mono">{% if h.original_primary %}{{ h.original_primary }}{% else %}<span class="muted">（空）</span>{% endif %}</td>
+        <td style="font-size:12.5px">
+          {% if h.has_conflict %}
+            <span class="bad-text">{{ h.conflict_labels|join('；') }}</span><br>
+            {% for c in h.conflicts %}<span class="muted">{{ c.detail }}</span><br>{% endfor %}
+          {% elif h.corrected %}
+            <span class="ok-text">已更正为 {{ h.effective_primary or '通过' }}</span>
+          {% else %}
+            <span class="ok-text">✓ 一致</span>
+          {% endif %}
+        </td>
+        <td>
+          <form method="post" action="{{ url_for('migration_correct', job_id=job.job_id) }}" class="file-row" style="margin:0;">
+            <input type="hidden" name="record_no" value="{{ h.row.record_no }}">
+            <input type="text" name="primary_code" value="{{ h.effective_primary }}" style="width:120px" placeholder="留空=通过">
+            <button type="submit" style="padding:7px 12px;">更正</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>待迁移记录判定</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:90px">记录号</th>
+        <th class="num">毛重(g)</th>
+        <th class="num">托盘重(g)</th>
+        <th class="num">申报净重(g)</th>
+        <th>全部命中规则</th>
+        <th style="width:100px">结论</th>
+        <th style="width:100px">主码</th>
+        <th>说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in report.pending %}
+      <tr>
+        <td class="mono"><b>{{ d.row.record_no }}</b></td>
+        <td class="num mono">{{ d.row.values.gross }}</td>
+        <td class="num mono">{{ d.row.values.tare }}</td>
+        <td class="num mono">{{ d.row.values.declared }}</td>
+        <td class="mono">{% if d.fired_ids %}{{ d.fired_ids|join('、') }}{% else %}<span class="muted">无命中</span>{% endif %}</td>
+        <td>
+          {% if d.status == 'pass' %}<span class="badge badge-solo">通过</span>
+          {% elif d.status == 'determined' %}<span class="badge badge-solo">主码确定</span>
+          {% else %}<span class="badge badge-joint">待核</span>{% endif %}
+        </td>        <td class="mono">{% if d.primary_code %}{{ d.primary_code }}{% elif d.status == 'pass' %}<span class="muted">—</span>{% else %}？{% endif %}</td>
+        <td style="font-size:12.5px">
+          {{ d.note }}
+          {% if d.status == 'review' and d.candidates %}（候选：{{ d.candidates|join('、') }}）{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="hint">
+    “无命中”直接记通过；“所有相容顺序的首条命中一致”才填主码；“先后关系不足以判定唯一首条”标为待核。
+    待核行不进入下载，需补齐历史记录后重新上传。
+  </p>
+</div>
+
+{% if job.correction_log %}
+<div class="card">
+  <h2>更正记录（保留更正与原因）</h2>
+  <table>
+    <thead>
+      <tr><th style="width:90px">记录号</th><th style="width:90px">原主码</th><th style="width:90px">更正为</th><th style="width:150px">时间</th><th>重算后原因</th></tr>
+    </thead>
+    <tbody>
+      {% for e in job.correction_log %}
+      <tr>
+        <td class="mono">{{ e.record_no }}</td>
+        <td class="mono">{{ e.original or '（空）' }}</td>
+        <td class="mono">{{ e.new_code or '（空 = 通过）' }}</td>
+        <td class="mono">{{ e.at }}</td>
+        <td style="font-size:12.5px">
+          {% if e.introduced %}<span class="bad-text">引入冲突：</span>{% endif %}{{ e.reason }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="hint">更正会立即重算标记与下载内容；一旦引入冲突，下载保持暂停，直到冲突排除。</p>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

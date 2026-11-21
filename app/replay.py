@@ -24,10 +24,17 @@ CSV_HEADER = [
     "fired_rule_ids",
 ]
 
-_HEADER_ALIASES = {
+HEADER_ALIASES = {
     "row_id": "row_id",
     "编号": "row_id",
     "行号": "row_id",
+    "record_no": "record_no",
+    "记录号": "record_no",
+    "记录编号": "record_no",
+    "primary_code": "primary_code",
+    "主码": "primary_code",
+    "拒收码": "primary_code",
+    "首条命中码": "primary_code",
     "gross_g": "gross",
     "gross": "gross",
     "毛重": "gross",
@@ -111,7 +118,17 @@ def render_csv(rows: Sequence[Dict[str, str]]) -> str:
     return buf.getvalue()
 
 
-def _parse_int(raw: str, lineno: int, col: str) -> int:
+def decode_csv_bytes(raw: bytes) -> str:
+    """按 UTF-8（含 BOM）→ GBK 的顺序解码上传的 CSV。"""
+    for encoding in ("utf-8-sig", "gbk"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError("CSV 编码无法识别，请保存为 UTF-8 或 GBK 后重试")
+
+
+def parse_int_cell(raw: str, lineno: int, col: str) -> int:
     raw = raw.strip()
     if not raw:
         raise ValueError(f"第 {lineno} 行 {col} 为空")
@@ -142,7 +159,7 @@ def replay_csv(text: str, rules: List[Rule]) -> ReplayReport:
     except StopIteration:
         return ReplayReport(rows=[], errors=["CSV 文件为空"])
 
-    normalized = [_HEADER_ALIASES.get(h.strip().lower(), h.strip()) for h in header]
+    normalized = [HEADER_ALIASES.get(h.strip().lower(), h.strip()) for h in header]
     missing = [f for f in FIELDS if f not in normalized]
     if missing:
         return ReplayReport(
@@ -161,7 +178,7 @@ def replay_csv(text: str, rules: List[Rule]) -> ReplayReport:
             continue
         try:
             values = {
-                f: _parse_int(record[index[f]], offset, f)
+                f: parse_int_cell(record[index[f]], offset, f)
                 for f in FIELDS
             }
         except (ValueError, IndexError) as exc:
